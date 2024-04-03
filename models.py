@@ -4,20 +4,21 @@ import torch.nn.functional as F
 
 
 class FixedLengthCRNN(nn.Module):
-    def __init__(self):
+    def __init__(self, num_classes, seq_length, input_channels=1):
         super(FixedLengthCRNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=(3, 3))
+        self.seq_length = seq_length
+        self.num_classes = num_classes
+
+        self.conv1 = nn.Conv2d(input_channels, 32, kernel_size=(3, 3))
         self.pool1 = nn.MaxPool2d((2, 2))
         self.conv2 = nn.Conv2d(32, 64, kernel_size=(3, 3))
         self.pool2 = nn.MaxPool2d((2, 2))
         self.conv3 = nn.Conv2d(64, 64, kernel_size=(3, 3))
 
-        # Assuming the input size is fixed and known, calculate the size here
-        # For example, let's assume the output of the last conv layer is (batch_size, 64, H, W)
-        # You will need to adjust H and W based on your actual output sizes
-        self.rnn_input_size = (
-            64  # This needs to be adjusted based on the output shape after conv layers
-        )
+        # The rnn_input_size and the calculation of H and W depend on the size of the input images
+        # and the architecture of the network. It needs to be calculated based on the output size
+        # after the convolutional and pooling layers.
+        self.rnn_input_size = 64  # Placeholder value, needs to be calculated properly
         self.rnn_hidden_size = 128
 
         self.lstm = nn.LSTM(
@@ -27,10 +28,10 @@ class FixedLengthCRNN(nn.Module):
             batch_first=True,
         )
 
-        # For a fixed length of 4 and 36 possible characters, adjust the linear layer
+        # Adjust the linear layer to accommodate variable sequence length and number of classes
         self.fc = nn.Linear(
-            self.rnn_hidden_size * 2, 4 * 36
-        )  # 128 * 2 for bidirectional
+            self.rnn_hidden_size * 2, self.seq_length * self.num_classes
+        )
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
@@ -39,7 +40,6 @@ class FixedLengthCRNN(nn.Module):
         x = self.pool2(x)
         x = F.relu(self.conv3(x))
 
-        # Adjust dimensions before feeding into RNN
         batch_size, channels, height, width = x.size()
         x = x.permute(0, 3, 1, 2)  # Change to (batch, width, channels, height)
         x = x.view(
@@ -49,8 +49,8 @@ class FixedLengthCRNN(nn.Module):
         x, _ = self.lstm(x)
         x = self.fc(x)
 
-        # Reshape to (batch_size, 4, 36) to get predictions for each of the 4 characters
-        x = x.view(batch_size, 4, 36)
+        # Reshape to (batch_size, seq_length, num_classes) for sequence predictions
+        x = x.view(batch_size, self.seq_length, self.num_classes)
 
         return x
 
